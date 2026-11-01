@@ -1,0 +1,52 @@
+{
+  "name": "opencode-ssh-manager",
+  "version": "1.0.0",
+  "description": "OpenCode plugin: manage a per-project ssh-agent and load keys from disk or the env-manager vault",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/craig-dougan-maersk/opencode-ssh-manager.git"
+  },
+  "homepage": "https://github.com/craig-dougan-maersk/opencode-ssh-manager#readme",
+  "bugs": {
+    "url": "https://github.com/craig-dougan-maersk/opencode-ssh-manager/issues"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "ssh",
+    "ssh-agent",
+    "ssh-key",
+    "secrets",
+    "vault"
+  ],
+  "exports": {
+    ".": "./dist/index.js",
+    "./tui": "./dist/tui.js",
+    "./rpc": "./dist/rpc.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node test/run.js"
+  },
+  "dependencies": {
+    "@opencode/plugin": "^2.2.0"
+  },
+  "peerDependencies": {
+    "solid-js": ">=1.9.0"
+  },
+  "devDependencies": {
+    "@opentui/core": "^0.8.1",
+    "@opentui/solid": "^0.8.1",
+    "@types/node": "^22.0.0",
+    "solid-js": "^1.9.0",
+    "typescript": "^5.6.0"
+  }
+}
