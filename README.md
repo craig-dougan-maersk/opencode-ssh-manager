@@ -41,7 +41,7 @@ After changing `src/`, rebuild and commit `dist/`:
 ```bash
 npm install
 npm run typecheck
-npm run build
+npm run compile
 ```
 
 ## Usage
@@ -247,12 +247,12 @@ plugin refuses to kill a process unless its command line matches the managed
 ```bash
 npm install
 npm run typecheck
-npm run build
+npm run compile
 npm test
 ```
 
 `npm test` starts a real isolated `ssh-agent` under a temporary
-`XDG_RUNTIME_DIR`, loads the current user's `~/.ssh/maersk` key, and exercises
+`XDG_RUNTIME_DIR`, generates disposable keys, and exercises disk loading,
 vault key material, passphrase loading, unload and stop. It never prints key
 material.
 

@@ -23,6 +23,11 @@ const runtime = path.join(root, "runtime")
 await fs.mkdir(project, { recursive: true })
 process.env.XDG_RUNTIME_DIR = runtime
 
+const keyDir = path.join(root, "keys")
+await fs.mkdir(keyDir, { recursive: true, mode: 0o700 })
+const keyFile = path.join(keyDir, "id_ed25519")
+execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "ssh-manager-test", "-f", keyFile])
+
 const config = defaultAgentConfig()
 config.lifetimeSeconds = 120
 
@@ -36,7 +41,6 @@ try {
   assert.equal(status.running, true)
   assert.equal(status.loaded.length, 0)
 
-  const keyFile = path.join(os.homedir(), ".ssh", "maersk")
   const result = await loadKey({
     agent: config,
     socket: started.socket,
@@ -60,11 +64,7 @@ try {
 
   // Vault-sourced key material is written to a private temp file and removed.
   const vaultAgent = await startAgent(project, config)
-  const keyDir = path.join(root, "keys")
-  await fs.mkdir(keyDir, { recursive: true, mode: 0o700 })
-  const generated = path.join(keyDir, "id_ed25519")
-  execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "vault-test", "-f", generated])
-  const privateKey = await fs.readFile(generated, "utf8")
+  const privateKey = await fs.readFile(keyFile, "utf8")
   const vaultResult = await loadKey({
     agent: config,
     socket: vaultAgent.socket,
