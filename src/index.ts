@@ -26,7 +26,7 @@ import {
   writeKeyCache,
 } from "./agent.js"
 import { loadKey } from "./keys.js"
-import { vaultEntries, vaultGet } from "./env-manager.js"
+import { secretStoreEntries, secretStoreGet } from "./env-manager.js"
 import { SshManager } from "./rpc.js"
 import type {
   AgentConfig,
@@ -35,7 +35,7 @@ import type {
   KeyStatus,
   ProfileStatus,
   SessionState,
-  VaultEntriesResult,
+  SecretStoreEntriesResult,
 } from "./types.js"
 
 interface Runtime {
@@ -54,7 +54,7 @@ export default Plugin.define({
     let registration: any
 
     const rpcCall = (definition: any) => (ctx.rpc as any)(definition)
-    const vaultOptions = { rpc: rpcCall, directory }
+    const secretStoreOptions = { rpc: rpcCall, directory }
 
     function storageKey(sessionID: string): string {
       return `ssh:session:${directory}:${sessionID}`
@@ -94,14 +94,14 @@ export default Plugin.define({
       }
     }
 
-    async function collectVaultValues(key: KeyConfig): Promise<Record<string, string>> {
+    async function collectSecretStoreValues(key: KeyConfig): Promise<Record<string, string>> {
       const entries: string[] = []
-      if (key.source === "vault" && key.entry) entries.push(key.entry)
+      if (key.source === "secret-store" && key.entry) entries.push(key.entry)
       if (key.passphraseEntry) entries.push(key.passphraseEntry)
       if (!entries.length) return {}
-      const result = await vaultGet(vaultOptions, entries)
+      const result = await secretStoreGet(secretStoreOptions, entries)
       if (result.missing.length) {
-        throw new Error(`Vault entr${result.missing.length === 1 ? "y" : "ies"} not found: ${result.missing.join(", ")}`)
+        throw new Error(`Secret store entr${result.missing.length === 1 ? "y" : "ies"} not found: ${result.missing.join(", ")}`)
       }
       return result.values
     }
@@ -110,7 +110,7 @@ export default Plugin.define({
       const key = config.keys[keyID]
       if (!key) throw new Error(`Unknown key: ${keyID}`)
       const runtimeDir = await projectRuntimeDir(directory)
-      const values = await collectVaultValues(key)
+      const values = await collectSecretStoreValues(key)
       const socket = await ensureAgent(config.agent)
       const result = await loadKey({
         agent: config.agent,
@@ -118,7 +118,7 @@ export default Plugin.define({
         runtimeDir,
         directory,
         key,
-        vaultValues: values,
+        secretStoreValues: values,
       })
       const cache = await readKeyCache(runtimeDir)
       cache[keyID] = result.fingerprint
@@ -168,14 +168,14 @@ export default Plugin.define({
           }
           if (fingerprint && liveSet.has(fingerprint)) continue
 
-          const values = await collectVaultValues(key)
+          const values = await collectSecretStoreValues(key)
           const loaded = await loadKey({
             agent: config.agent,
             socket,
             runtimeDir,
             directory,
             key,
-            vaultValues: values,
+            secretStoreValues: values,
           })
           cache[keyID] = loaded.fingerprint
           liveSet.add(loaded.fingerprint)
@@ -454,7 +454,7 @@ export default Plugin.define({
         await notify()
         return buildState(input?.sessionID)
       },
-      vaultEntries: async (): Promise<VaultEntriesResult> => jsonSafe(await vaultEntries(vaultOptions)),
+      secretStoreEntries: async (): Promise<SecretStoreEntriesResult> => jsonSafe(await secretStoreEntries(secretStoreOptions)),
     }
 
     registration = await ctx.rpc.register(SshManager, handlers as any)

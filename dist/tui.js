@@ -60,7 +60,7 @@ export default Plugin.define({
         }
         function keyDescription(key) {
             const parts = [];
-            parts.push(key.source === "vault" ? `vault ${key.entry ?? ""}` : key.path ?? "file");
+            parts.push(key.source === "secret-store" ? `secret-store ${key.entry ?? ""}` : key.path ?? "file");
             if (key.fingerprint)
                 parts.push(key.fingerprint);
             if (key.loaded)
@@ -178,7 +178,7 @@ export default Plugin.define({
             if (!state.keys.length) {
                 await context.ui.dialog.alert({
                     title: "No SSH keys",
-                    message: "Add a key from disk or from the env-manager vault first.",
+                    message: "Add a key from disk or from the env-manager secret store first.",
                 });
                 return false;
             }
@@ -190,7 +190,7 @@ export default Plugin.define({
                         title: `${key.loaded ? "●" : "○"} ${key.label}`,
                         value: `key:${key.id}`,
                         description: keyDescription(key),
-                        category: key.source === "vault" ? "Vault" : "Disk",
+                        category: key.source === "secret-store" ? "Secret store" : "Disk",
                     })),
                     ...state.loadedExtras.map((key) => ({
                         title: `● ${key.comment || key.fingerprint}`,
@@ -327,27 +327,27 @@ export default Plugin.define({
             toast(`Added disk key ${keyID.trim()}`, "success");
             return true;
         }
-        async function vaultEntries(sessionID) {
-            return (await call("vaultEntries", {}, sessionID));
+        async function secretStoreEntries(sessionID) {
+            return (await call("secretStoreEntries", {}, sessionID));
         }
-        async function addVaultKey(sessionID, state) {
-            const vault = await vaultEntries(sessionID);
-            if (!vault.ok) {
+        async function addSecretStoreKey(sessionID, state) {
+            const store = await secretStoreEntries(sessionID);
+            if (!store.ok) {
                 const manual = await context.ui.dialog.confirm({
-                    title: "env-manager vault unavailable",
-                    message: vault.error ??
-                        "The env-manager vault could not be read. You can still type the vault entry name manually.",
+                    title: "env-manager secret store unavailable",
+                    message: store.error ??
+                        "The env-manager secret store could not be read. You can still type the store entry name manually.",
                     label: { confirm: "Enter entry manually", cancel: "Cancel" },
                 });
                 if (!manual)
                     return false;
             }
             let entry;
-            if (vault.ok && vault.entries.length) {
+            if (store.ok && store.entries.length) {
                 entry = await context.ui.dialog.select({
-                    title: "Vault entry containing the private key",
-                    placeholder: "Search vault entries",
-                    options: vault.entries.map((name) => ({
+                    title: "Secret store entry containing the private key",
+                    placeholder: "Search secret store entries",
+                    options: store.entries.map((name) => ({
                         title: name,
                         value: name,
                         description: "Private key material",
@@ -362,8 +362,8 @@ export default Plugin.define({
             }
             else {
                 entry = await context.ui.dialog.prompt({
-                    title: "Vault entry containing the private key",
-                    description: "Exact entry name in the env-manager vault",
+                    title: "Secret store entry containing the private key",
+                    description: "Exact entry name in the env-manager secret store",
                     placeholder: "ssh/deploy-key",
                 });
             }
@@ -373,7 +373,7 @@ export default Plugin.define({
                 .trim()
                 .split("/")
                 .pop()
-                .replace(/[^A-Za-z0-9._-]+/g, "-") || "vault-key";
+                .replace(/[^A-Za-z0-9._-]+/g, "-") || "secret-store-key";
             const keyID = await context.ui.dialog.prompt({
                 title: "Key ID",
                 description: "Letters, digits, dots, dashes and underscores",
@@ -382,13 +382,13 @@ export default Plugin.define({
             if (!keyID?.trim())
                 return false;
             let passphraseEntry;
-            if (vault.ok && vault.entries.length) {
+            if (store.ok && store.entries.length) {
                 const choice = await context.ui.dialog.select({
                     title: "Passphrase entry",
-                    placeholder: "Search vault entries",
+                    placeholder: "Search secret store entries",
                     options: [
                         { title: "(none)", value: "", description: "Key is not passphrase-protected" },
-                        ...vault.entries
+                        ...store.entries
                             .filter((name) => name !== entry)
                             .map((name) => ({ title: name, value: name, description: "Passphrase for this key" })),
                     ],
@@ -404,7 +404,7 @@ export default Plugin.define({
             else {
                 const answer = await context.ui.dialog.prompt({
                     title: "Passphrase entry",
-                    description: "Optional env-manager vault entry holding the passphrase",
+                    description: "Optional env-manager secret store entry holding the passphrase",
                     placeholder: "ssh/deploy-passphrase",
                 });
                 passphraseEntry = answer?.trim() || undefined;
@@ -424,27 +424,27 @@ export default Plugin.define({
             await call("addKey", {
                 keyID: keyID.trim(),
                 key: {
-                    source: "vault",
+                    source: "secret-store",
                     entry: entry.trim(),
                     passphraseEntry,
                     label: keyID.trim(),
                 },
                 profile,
             }, sessionID);
-            toast(`Added vault key ${keyID.trim()}`, "success");
+            toast(`Added secret-store key ${keyID.trim()}`, "success");
             return true;
         }
-        async function showVaultStatus(sessionID) {
-            const vault = (await vaultEntries(sessionID));
-            if (!vault.ok && !vault.layers?.length) {
+        async function showSecretStoreStatus(sessionID) {
+            const store = (await secretStoreEntries(sessionID));
+            if (!store.ok && !store.layers?.length) {
                 await context.ui.dialog.alert({
-                    title: "Vault unavailable",
-                    message: vault.error ?? "The env-manager vault could not be read.",
+                    title: "Secret store unavailable",
+                    message: store.error ?? "The env-manager secret store could not be read.",
                 });
                 return;
             }
             const lines = [];
-            for (const [index, layer] of (vault.layers ?? []).entries()) {
+            for (const [index, layer] of (store.layers ?? []).entries()) {
                 lines.push(`${index + 1}. ${layer.store ?? layer.provider}`);
                 if (layer.ok)
                     lines.push(`   ok · ${layer.entries.length} entries`);
@@ -457,13 +457,13 @@ export default Plugin.define({
                 for (const warning of layer.warnings ?? [])
                     lines.push(`   ⚠ ${warning}`);
             }
-            for (const warning of vault.warnings ?? [])
+            for (const warning of store.warnings ?? [])
                 lines.push(`⚠ ${warning}`);
-            if (vault.error)
-                lines.push(`⚠ ${vault.error}`);
+            if (store.error)
+                lines.push(`⚠ ${store.error}`);
             await context.ui.dialog.alert({
-                title: `env-manager vault — ${(vault.entries ?? []).length} entries`,
-                message: lines.join("\n") || "No vault layers configured.",
+                title: `env-manager secret store — ${(store.entries ?? []).length} entries`,
+                message: lines.join("\n") || "No secret store layers configured.",
             });
         }
         async function editProfile(sessionID, state) {
@@ -565,7 +565,7 @@ export default Plugin.define({
                 value: "profiles",
                 description: state.activeProfile ? `Active: ${state.activeProfile}` : "No profile assigned",
                 category: "Profiles",
-            }, { title: "Set default profile…", value: "default-profile", category: "Profiles" }, { title: "Edit profile keys…", value: "edit-profile", category: "Profiles" }, { title: "Manage keys…", value: "keys", description: `${state.keys.length} configured`, category: "Keys" }, { title: "Add key from disk…", value: "add-file", category: "Keys" }, { title: "Add key from env-manager vault…", value: "add-vault", category: "Keys" }, { title: "Vault status…", value: "vault", category: "Vault" }, { title: "Agent status…", value: "status", category: "Agent" });
+            }, { title: "Set default profile…", value: "default-profile", category: "Profiles" }, { title: "Edit profile keys…", value: "edit-profile", category: "Profiles" }, { title: "Manage keys…", value: "keys", description: `${state.keys.length} configured`, category: "Keys" }, { title: "Add key from disk…", value: "add-file", category: "Keys" }, { title: "Add key from env-manager secret store…", value: "add-secret-store", category: "Keys" }, { title: "Secret store status…", value: "secret-store", category: "Secret store" }, { title: "Agent status…", value: "status", category: "Agent" });
             const choice = await context.ui.dialog.select({
                 title: `SSH — ${state.agent.running ? "agent running" : "agent stopped"}`,
                 placeholder: "Search SSH actions",
@@ -618,12 +618,12 @@ export default Plugin.define({
                     state = await getState(sessionID);
                     await addFileKey(sessionID, state);
                     break;
-                case "add-vault":
+                case "add-secret-store":
                     state = await getState(sessionID);
-                    await addVaultKey(sessionID, state);
+                    await addSecretStoreKey(sessionID, state);
                     break;
-                case "vault":
-                    await showVaultStatus(sessionID);
+                case "secret-store":
+                    await showSecretStoreStatus(sessionID);
                     break;
                 case "status":
                     state = await getState(sessionID);

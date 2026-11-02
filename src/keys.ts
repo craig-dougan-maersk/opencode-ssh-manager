@@ -11,8 +11,8 @@ export interface LoadKeyInput {
   runtimeDir: string
   directory: string
   key: KeyConfig
-  /** Values fetched from the env-manager vault, keyed by entry name. */
-  vaultValues?: Record<string, string>
+  /** Values fetched from the env-manager secret store, keyed by entry name. */
+  secretStoreValues?: Record<string, string>
 }
 
 export interface LoadedKeyResult {
@@ -22,7 +22,7 @@ export interface LoadedKeyResult {
 
 export async function loadKey(input: LoadKeyInput): Promise<LoadedKeyResult> {
   const passphrase = input.key.passphraseEntry
-    ? requireValue(input.vaultValues, input.key.passphraseEntry, "passphrase")
+    ? requireValue(input.secretStoreValues, input.key.passphraseEntry, "passphrase")
     : undefined
 
   if (input.key.source === "file") {
@@ -33,16 +33,16 @@ export async function loadKey(input: LoadKeyInput): Promise<LoadedKeyResult> {
     const needsPassphrase = await keyNeedsPassphrase(input.agent, real)
     if (needsPassphrase && !passphrase) {
       throw new Error(
-        `Key ${input.key.path} is passphrase-protected. Add "passphraseEntry" pointing at a vault entry, then load it again.`,
+        `Key ${input.key.path} is passphrase-protected. Add "passphraseEntry" pointing at a secret-store entry, then load it again.`,
       )
     }
     await sshAdd(input.agent, input.socket, real, passphrase, input.runtimeDir)
     return { fingerprint: fingerprint.fingerprint, keyPath: real }
   }
 
-  if (!input.key.entry) throw new Error("Vault key has no entry")
-  const value = requireValue(input.vaultValues, input.key.entry, "private key")
-  const material = decodeVaultKey(value, input.key.format)
+  if (!input.key.entry) throw new Error("Secret-store key has no entry")
+  const value = requireValue(input.secretStoreValues, input.key.entry, "private key")
+  const material = decodeSecretStoreKey(value, input.key.format)
   const temp = await writeTempKey(input.runtimeDir, material)
   try {
     await validatePrivateKeyFile(temp.file)
@@ -50,7 +50,7 @@ export async function loadKey(input: LoadKeyInput): Promise<LoadedKeyResult> {
     const needsPassphrase = await keyNeedsPassphrase(input.agent, temp.file)
     if (needsPassphrase && !passphrase) {
       throw new Error(
-        `Vault key ${input.key.entry} is passphrase-protected. Add "passphraseEntry" pointing at a vault entry, then load it again.`,
+        `Secret-store key ${input.key.entry} is passphrase-protected. Add "passphraseEntry" pointing at a secret-store entry, then load it again.`,
       )
     }
     await sshAdd(input.agent, input.socket, temp.file, passphrase, input.runtimeDir)
@@ -60,7 +60,7 @@ export async function loadKey(input: LoadKeyInput): Promise<LoadedKeyResult> {
   }
 }
 
-export function decodeVaultKey(value: string, format: KeyConfig["format"]): string {
+export function decodeSecretStoreKey(value: string, format: KeyConfig["format"]): string {
   let material = value
   const trimmed = value.trim()
   if (format === "base64" || trimmed.startsWith("base64:")) {
@@ -68,15 +68,15 @@ export function decodeVaultKey(value: string, format: KeyConfig["format"]): stri
     try {
       material = Buffer.from(payload.replace(/\s+/g, ""), "base64").toString("utf8")
     } catch {
-      throw new Error("Vault entry is not valid base64")
+      throw new Error("Secret store entry is not valid base64")
     }
   }
 
-  if (!material.trim()) throw new Error("Vault entry is empty")
-  if (material.includes("\u0000")) throw new Error("Vault entry contains a NUL byte")
+  if (!material.trim()) throw new Error("Secret store entry is empty")
+  if (material.includes("\u0000")) throw new Error("Secret store entry contains a NUL byte")
   if (!/PRIVATE KEY-----/.test(material)) {
     throw new Error(
-      "Vault entry does not contain a private key. Store the key itself, or use source \"file\" for a path.",
+      "Secret store entry does not contain a private key. Store the key itself, or use source \"file\" for a path.",
     )
   }
   return material.endsWith("\n") ? material : `${material}\n`
@@ -160,6 +160,6 @@ async function writeAskpass(runtimeDir: string, passphrase: string): Promise<{ d
 
 function requireValue(values: Record<string, string> | undefined, entry: string, what: string): string {
   const value = values?.[entry]
-  if (value === undefined) throw new Error(`Vault ${what} entry not found: ${entry}`)
+  if (value === undefined) throw new Error(`Secret store ${what} entry not found: ${entry}`)
   return value
 }

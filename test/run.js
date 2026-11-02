@@ -14,7 +14,7 @@ import {
   stopAgent,
   unloadByPublicKey,
 } from "../dist/agent.js"
-import { decodeVaultKey, loadKey } from "../dist/keys.js"
+import { decodeSecretStoreKey, loadKey } from "../dist/keys.js"
 import { defaultAgentConfig, loadConfig, mutateProjectConfig, projectConfigPath } from "../dist/config.js"
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-ssh-test-"))
@@ -62,26 +62,27 @@ try {
   await assert.rejects(fs.stat(socketPath(await projectRuntimeDir(project))))
   assert.equal((await agentStatus(project, config, false)).running, false)
 
-  // Vault-sourced key material is written to a private temp file and removed.
-  const vaultAgent = await startAgent(project, config)
+  // Secret-store-sourced key material is written to a private temp file and removed.
+  const storeAgent = await startAgent(project, config)
   const privateKey = await fs.readFile(keyFile, "utf8")
-  const vaultResult = await loadKey({
+  const storeResult = await loadKey({
     agent: config,
-    socket: vaultAgent.socket,
+    socket: storeAgent.socket,
     runtimeDir: await projectRuntimeDir(project),
     directory: project,
-    key: { source: "vault", entry: "ssh/test-key", format: "base64" },
-    vaultValues: { "ssh/test-key": Buffer.from(privateKey).toString("base64") },
+    key: { source: "secret-store", entry: "ssh/test-key", format: "base64" },
+    secretStoreValues: { "ssh/test-key": Buffer.from(privateKey).toString("base64") },
   })
-  assert.match(vaultResult.fingerprint, /^SHA256:/)
-  const vaultLoaded = await listLoadedKeys(config, vaultAgent.socket)
-  assert.equal(vaultLoaded.length, 1)
+  assert.match(storeResult.fingerprint, /^SHA256:/)
+  const storeLoaded = await listLoadedKeys(config, storeAgent.socket)
+  assert.equal(storeLoaded.length, 1)
   const tmpEntries = await fs.readdir(path.join(await projectRuntimeDir(project), "tmp"))
-  assert.deepEqual(tmpEntries, [], "vault key temp files should be removed")
-  await unloadByPublicKey(config, vaultAgent.socket, vaultLoaded[0].publicKey)
+  assert.deepEqual(tmpEntries, [], "secret-store key temp files should be removed")
+  await unloadByPublicKey(config, storeAgent.socket, storeLoaded[0].publicKey)
   await stopAgent(project, config)
 
-  // A passphrase-protected key can be loaded using a vault passphrase entry.
+  // A passphrase-protected key can be loaded using a secret-store passphrase entry.
+  // `source: "vault"` here also proves the pre-rename value is still accepted.
   const passAgent = await startAgent(project, config)
   const protectedKey = path.join(keyDir, "id_ed25519_protected")
   execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "correct horse", "-C", "pass-test", "-f", protectedKey])
@@ -92,7 +93,7 @@ try {
     runtimeDir: await projectRuntimeDir(project),
     directory: project,
     key: { source: "vault", entry: "ssh/pass-key", passphraseEntry: "ssh/passphrase" },
-    vaultValues: {
+    secretStoreValues: {
       "ssh/pass-key": protectedMaterial,
       "ssh/passphrase": "correct horse",
     },
@@ -109,7 +110,7 @@ try {
     type: "ED25519",
   })
 
-  const decoded = decodeVaultKey(Buffer.from("-----BEGIN OPENSSH PRIVATE KEY-----\na\n-----END OPENSSH PRIVATE KEY-----\n").toString("base64"), "base64")
+  const decoded = decodeSecretStoreKey(Buffer.from("-----BEGIN OPENSSH PRIVATE KEY-----\na\n-----END OPENSSH PRIVATE KEY-----\n").toString("base64"), "base64")
   assert.match(decoded, /BEGIN OPENSSH PRIVATE KEY/)
 
   await fs.mkdir(path.dirname(projectConfigPath(project)), { recursive: true })
@@ -134,6 +135,7 @@ try {
   })
   const changed = await loadConfig(project)
   assert.ok(changed.keys.other)
+  assert.equal(changed.keys.other.source, "secret-store", "legacy source \"vault\" should normalise to \"secret-store\"")
   assert.deepEqual(changed.profiles.personal.keys, ["other"])
 
   // Exercise the server plugin with a minimal OpenCode-like context.

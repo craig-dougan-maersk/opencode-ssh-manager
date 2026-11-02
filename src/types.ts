@@ -1,4 +1,4 @@
-export type KeySource = "file" | "vault"
+export type KeySource = "file" | "secret-store"
 export type KeyFormat = "pem" | "base64"
 
 export interface KeyConfig {
@@ -114,7 +114,7 @@ export interface SessionState {
   lastError?: string
 }
 
-export interface VaultEntriesResult {
+export interface SecretStoreEntriesResult {
   ok: boolean
   entries: string[]
   layers: Array<{
