@@ -7,7 +7,7 @@ const result = { type: "object", additionalProperties: true } as const
 const keyInput = {
   type: "object",
   properties: {
-    source: { type: "string", enum: ["file", "vault"] },
+    source: { type: "string", enum: ["file", "secret-store", "vault"] },
     path: string,
     entry: string,
     format: { type: "string", enum: ["pem", "base64"] },
@@ -150,7 +150,7 @@ export const SshManager = Rpc.define({
       },
       output: result,
     },
-    vaultEntries: {
+    secretStoreEntries: {
       input: {
         type: "object",
         properties: { directory: string },

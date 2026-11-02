@@ -4,7 +4,7 @@ import { Plugin } from "@opencode/plugin";
 import { expandPath, loadConfig, mutateProjectConfig, normalizeProjectConfig, projectConfigPath, globalConfigPath, validateKeyId, validateProfileName, } from "./config.js";
 import { agentStatus, cleanupRuntime, clearAgent, fingerprintOfKeyFile, listLoadedKeys, projectRuntimeDir, readKeyCache, startAgent, stopAgent, unloadByPublicKey, writeKeyCache, } from "./agent.js";
 import { loadKey } from "./keys.js";
-import { vaultEntries, vaultGet } from "./env-manager.js";
+import { secretStoreEntries, secretStoreGet } from "./env-manager.js";
 import { SshManager } from "./rpc.js";
 export default Plugin.define({
     id: "ssh.manager",
@@ -14,7 +14,7 @@ export default Plugin.define({
         const ensured = new Set();
         let registration;
         const rpcCall = (definition) => ctx.rpc(definition);
-        const vaultOptions = { rpc: rpcCall, directory };
+        const secretStoreOptions = { rpc: rpcCall, directory };
         function storageKey(sessionID) {
             return `ssh:session:${directory}:${sessionID}`;
         }
@@ -53,17 +53,17 @@ export default Plugin.define({
                 runtime.activePid = undefined;
             }
         }
-        async function collectVaultValues(key) {
+        async function collectSecretStoreValues(key) {
             const entries = [];
-            if (key.source === "vault" && key.entry)
+            if (key.source === "secret-store" && key.entry)
                 entries.push(key.entry);
             if (key.passphraseEntry)
                 entries.push(key.passphraseEntry);
             if (!entries.length)
                 return {};
-            const result = await vaultGet(vaultOptions, entries);
+            const result = await secretStoreGet(secretStoreOptions, entries);
             if (result.missing.length) {
-                throw new Error(`Vault entr${result.missing.length === 1 ? "y" : "ies"} not found: ${result.missing.join(", ")}`);
+                throw new Error(`Secret store entr${result.missing.length === 1 ? "y" : "ies"} not found: ${result.missing.join(", ")}`);
             }
             return result.values;
         }
@@ -72,7 +72,7 @@ export default Plugin.define({
             if (!key)
                 throw new Error(`Unknown key: ${keyID}`);
             const runtimeDir = await projectRuntimeDir(directory);
-            const values = await collectVaultValues(key);
+            const values = await collectSecretStoreValues(key);
             const socket = await ensureAgent(config.agent);
             const result = await loadKey({
                 agent: config.agent,
@@ -80,7 +80,7 @@ export default Plugin.define({
                 runtimeDir,
                 directory,
                 key,
-                vaultValues: values,
+                secretStoreValues: values,
             });
             const cache = await readKeyCache(runtimeDir);
             cache[keyID] = result.fingerprint;
@@ -124,14 +124,14 @@ export default Plugin.define({
                     }
                     if (fingerprint && liveSet.has(fingerprint))
                         continue;
-                    const values = await collectVaultValues(key);
+                    const values = await collectSecretStoreValues(key);
                     const loaded = await loadKey({
                         agent: config.agent,
                         socket,
                         runtimeDir,
                         directory,
                         key,
-                        vaultValues: values,
+                        secretStoreValues: values,
                     });
                     cache[keyID] = loaded.fingerprint;
                     liveSet.add(loaded.fingerprint);
@@ -426,7 +426,7 @@ export default Plugin.define({
                 await notify();
                 return buildState(input?.sessionID);
             },
-            vaultEntries: async () => jsonSafe(await vaultEntries(vaultOptions)),
+            secretStoreEntries: async () => jsonSafe(await secretStoreEntries(secretStoreOptions)),
         };
         registration = await ctx.rpc.register(SshManager, handlers);
         const shellHook = await ctx.shell.hook("create.before", (event) => {

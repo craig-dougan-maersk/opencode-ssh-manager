@@ -56,7 +56,7 @@ export function validateProfileName(value) {
 export function validateEntryName(value) {
     const trimmed = value.trim();
     if (!isValidEntryName(trimmed)) {
-        throw new Error("Vault entry names may contain letters, digits, dots, dashes, slashes and underscores");
+        throw new Error("Secret store entry names may contain letters, digits, dots, dashes, slashes and underscores");
     }
     return trimmed;
 }
@@ -95,9 +95,13 @@ function normalizeKey(value, warnings) {
         warnings.push("key entry is not an object");
         return undefined;
     }
-    const source = value.source === "vault" ? "vault" : value.source === "file" ? "file" : undefined;
+    const source = value.source === "vault" || value.source === "secret-store"
+        ? "secret-store"
+        : value.source === "file"
+            ? "file"
+            : undefined;
     if (!source) {
-        warnings.push("key source must be \"file\" or \"vault\"");
+        warnings.push('key source must be "file" or "secret-store"');
         return undefined;
     }
     const key = { source };
@@ -110,7 +114,7 @@ function normalizeKey(value, warnings) {
     }
     else {
         if (typeof value.entry !== "string" || !isValidEntryName(value.entry.trim())) {
-            warnings.push("vault key is missing a valid entry name");
+            warnings.push("secret-store key is missing a valid entry name");
             return undefined;
         }
         key.entry = value.entry.trim();
@@ -119,7 +123,7 @@ function normalizeKey(value, warnings) {
         key.format = value.format;
     if (value.passphraseEntry !== undefined) {
         if (typeof value.passphraseEntry !== "string" || !isValidEntryName(value.passphraseEntry.trim())) {
-            warnings.push("passphraseEntry is not a valid vault entry name");
+            warnings.push("passphraseEntry is not a valid secret-store entry name");
         }
         else {
             key.passphraseEntry = value.passphraseEntry.trim();
@@ -318,7 +322,7 @@ export async function mutateProjectConfig(directory, change) {
     for (const [id, key] of Object.entries(next.keys)) {
         if (key.source === "file" && !key.path)
             delete next.keys[id];
-        if (key.source === "vault" && !key.entry)
+        if (key.source === "secret-store" && !key.entry)
             delete next.keys[id];
     }
     await writeProjectConfig(directory, next);

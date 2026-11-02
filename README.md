@@ -3,7 +3,7 @@
 Manage a dedicated OpenSSH agent from OpenCode. Start and stop it, load keys
 from disk, and load private keys from the
 [opencode-env-manager](https://github.com/craig-dougan-maersk/opencode-env-manager)
-encrypted vault. While the agent runs, every shell command started by OpenCode
+encrypted secret store. While the agent runs, every shell command started by OpenCode
 receives its `SSH_AUTH_SOCK`, so `git`, `ssh`, `scp`, deploy scripts and package
 managers work without extra setup.
 
@@ -29,8 +29,9 @@ git clone git@github.com:craig-dougan-maersk/opencode-ssh-manager.git ~/plugins/
 }
 ```
 
-Vault-backed keys additionally need `opencode-env-manager` **1.1.0 or newer**,
-because the SSH manager reads vault entries through its `vaultGet` RPC method.
+Secret-store-backed keys additionally need `opencode-env-manager` **1.2.0 or newer**,
+because the SSH manager reads entries through its `secretStoreGet` RPC method (the
+pre-rename `vaultGet` is tried as a fallback).
 Disk-backed keys work without env-manager.
 
 The package ships compiled JavaScript in `dist/`, including the TUI bundle, so a
@@ -58,10 +59,10 @@ The menu can:
 - set the default profile for new sessions
 - edit profile key membership
 - add a private key from disk
-- add a private key from the env-manager vault, optionally with a vault
+- add a private key from the env-manager secret store, optionally with a secret-store
   passphrase entry
 - load/unload individual keys, or unload every key
-- show agent status, loaded fingerprints, inherited `SSH_AUTH_SOCK`, and vault
+- show agent status, loaded fingerprints, inherited `SSH_AUTH_SOCK`, and secret-store
   layer status
 
 ### Sessions and profiles
@@ -122,7 +123,7 @@ never stores private key material or passphrases in either file.
       "label": "Work GitHub"
     },
     "deploy": {
-      "source": "vault",
+      "source": "secret-store",
       "entry": "ssh/deploy-key",
       "format": "pem",
       "passphraseEntry": "ssh/deploy-passphrase",
@@ -155,9 +156,10 @@ never stores private key material or passphrases in either file.
 
 - `source: "file"` requires `path`. `~`, `$HOME/`, absolute paths and paths
   relative to the project directory are supported.
-- `source: "vault"` requires `entry`, the env-manager vault entry containing
+- `source: "secret-store"` (the pre-rename `"vault"` is still accepted) requires
+  `entry`, the env-manager secret-store entry containing
   the private key itself. `format` is `"pem"` (default) or `"base64"`.
-- `passphraseEntry` is an optional env-manager vault entry containing the
+- `passphraseEntry` is an optional env-manager secret-store entry containing the
   passphrase for an encrypted key. It is read only when the key is loaded.
 - `label` is display text; it does not change the key's own comment.
 
@@ -165,9 +167,9 @@ Disk keys must be regular files owned by you with no group/world permission
 bits. The plugin refuses a key that is readable by other users and suggests
 `chmod 600`.
 
-### Vault key format
+### Secret-store key format
 
-The env-manager vault stores one `NAME=value` per line. Values are literal, so
+The env-manager secret store holds one `NAME=value` per line. Values are literal, so
 a PEM/OpenSSH private key needs `\n` escapes in a double-quoted value:
 
 ```dotenv
@@ -186,7 +188,7 @@ The value can also start with `base64:` to enable base64 decoding without
 changing the config.
 
 Private keys are never returned by a tool or written to the transcript. To load
-a vault key, the plugin asks env-manager for the entry, writes it to a `0600`
+a secret-store key, the plugin asks env-manager for the entry, writes it to a `0600`
 file inside the private runtime directory, runs `ssh-add`, and deletes the file
 immediately.
 
@@ -210,11 +212,11 @@ plugin refuses to kill a process unless its command line matches the managed
 
 ## Security model
 
-- Config contains key paths and vault entry names, never key material or
+- Config contains key paths and secret-store entry names, never key material or
   passphrases.
 - `ssh-add` is run without a shell. Passphrases are supplied through a temporary
   `SSH_ASKPASS` helper via the child environment, never on the command line.
-- Vault keys exist in plugin memory and briefly in a `0600` temp file while
+- Secret-store keys exist in plugin memory and briefly in a `0600` temp file while
   `ssh-add` reads them.
 - The agent socket is owned by your user. Any process running as you can use a
   loaded key, which is the normal ssh-agent trust model.
@@ -225,8 +227,8 @@ plugin refuses to kill a process unless its command line matches the managed
 - The plugin does not stop or modify an inherited agent from your terminal. It
   starts a separate managed agent and overrides `SSH_AUTH_SOCK` only for
   OpenCode shell commands.
-- `env-manager`'s `vaultGet` is a plugin-to-plugin API. It is not exposed as a
-  tool, so vault values never reach the model.
+- `env-manager`'s `secretStoreGet` (pre-rename `vaultGet`) is a plugin-to-plugin
+  API. It is not exposed as a tool, so secret-store values never reach the model.
 
 ## Limitations
 
@@ -239,7 +241,7 @@ plugin refuses to kill a process unless its command line matches the managed
   the rest of the run.
 - Keys are shared by all sessions in a project because the agent is
   project-scoped.
-- If `env-manager` is missing, disabled, or older than 1.1.0, vault-backed keys
+- If `env-manager` is missing, disabled, or older than 1.2.0, secret-store-backed keys
   fail with an actionable error. Disk-backed keys are unaffected.
 
 ## Development
@@ -253,7 +255,7 @@ npm test
 
 `npm test` starts a real isolated `ssh-agent` under a temporary
 `XDG_RUNTIME_DIR`, generates disposable keys, and exercises disk loading,
-vault key material, passphrase loading, unload and stop. It never prints key
+secret-store key material, passphrase loading, unload and stop. It never prints key
 material.
 
 ## License
